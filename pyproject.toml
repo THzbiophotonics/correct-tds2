@@ -1,0 +1,21 @@
+[project]
+name = "nouveau-tds"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Florian"}
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "panel (>=1.8.2,<2.0.0)",
+    "holoviews (>=1.21.0,<2.0.0)",
+    "h5py (>=3.15.1,<4.0.0)"
+]
+
+[tool.poetry]
+packages = [{include = "thz_analyzer"}]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,15 @@
+# Environnements virtuels
+venv/
+.env/
+
+# Fichiers Python compilés
+__pycache__/
+*.pyc
+
+# Config éditeurs
+.vscode/
+.idea/
+
+# Données volumineuses / temporaires
+*.h5
+*.log

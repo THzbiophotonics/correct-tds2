@@ -1,0 +1,14 @@
+{
+  "filter_low": true,
+  "filter_high": false,
+  "freq_start": 180000000000.0,
+  "freq_end": 6000000000000.0,
+  "sharpness": 1.0,
+  "tfilter_low": false,
+  "tfilter_high": false,
+  "t_start": 0.0,
+  "t_end": 1e-09,
+  "t_sharpness": 2.0,
+  "periodic_enable": true,
+  "periodic_freq_thz": 7.5
+}
