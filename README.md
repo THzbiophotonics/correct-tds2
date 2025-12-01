@@ -1,4 +1,4 @@
-﻿# Nouveau-TDS — THz Analyzer (Panel + JAX)
+﻿# Correct-TDS2 (Panel + JAX)
 
 ## Installation
 
