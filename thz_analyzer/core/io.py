@@ -33,16 +33,28 @@ def load_h5_file(file_path: Path | str) -> Optional[Tuple[List[np.ndarray], np.n
     """Load an HDF5 file containing a ``timeaxis`` dataset and numbered traces."""
     try:
         with h5py.File(file_path, "r") as f:
-            if "timeaxis" not in f:
+            if "time-traces" in f:
+                trace_group = f["time-traces"]
+            else:
+                trace_group = f
+
+            if "timeaxis" in trace_group:
+                timeaxis = np.array(trace_group["timeaxis"])
+            elif "timeaxis" in f:
+                timeaxis = np.array(f["timeaxis"])
+            else:
                 logger.error("File %s does not contain 'timeaxis'", file_path)
                 return None
-            timeaxis = np.array(f["timeaxis"])
-            keys = sorted((k for k in f.keys() if k.isdigit()), key=int)
+
+            keys = sorted((k for k in trace_group.keys() if k.isdigit()), key=int)
             if not keys:
                 logger.error("No numeric trace datasets found in %s", file_path)
                 return None
-            pulses = [np.array(f[k]) for k in keys]
+
+            pulses = [np.array(trace_group[k]) for k in keys]
+
         return pulses, timeaxis
+
     except Exception:
         logger.exception("Failed to load HDF5 %s", file_path)
         return None

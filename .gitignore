@@ -10,6 +10,12 @@ __pycache__/
 .vscode/
 .idea/
 
+# Historique local VSCode / plugins
+.history/
+
+# Dossier Exemple
+Exemple/
+
 # Données volumineuses / temporaires
 *.h5
 *.log
