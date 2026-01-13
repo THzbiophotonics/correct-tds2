@@ -8,7 +8,7 @@
 - JAX is required (choose based on your machine):
   - CPU only: `poetry run pip install -U "jax[cpu]"`
   - NVIDIA GPU (pick the line matching your installed CUDA):
-    - CUDA 13.x: `poetry run pip install -U "jax[cuda12]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html`
+    - CUDA 13.x: `poetry run pip install -U "jax[cuda13]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html`
     - CUDA 12.x: `poetry run pip install -U "jax[cuda12]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html`
     - CUDA 11.x: `poetry run pip install -U "jax[cuda11]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html`
 
