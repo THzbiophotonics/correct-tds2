@@ -3,10 +3,19 @@
   "filter_high": false,
   "freq_start": 180000000000.0,
   "freq_end": 6000000000000.0,
-  "sharpness": 1.0,
+  "sharpness": 2,
   "tfilter_low": false,
   "tfilter_high": false,
-  "t_start": 0.0,
-  "t_end": 9e-12,
-  "t_sharpness": 2.0
+  "t_start": -3.4e-10,
+  "t_end": -3.2e-10,
+  "t_sharpness": 2.0,
+  "periodic_enable": true,
+  "periodic_mode": "Strict",
+  "periodic_freq_thz": 7.5,
+  "opt_trace_mode": "All",
+  "opt_trace_count": 1000,
+  "quality_speed": 0.66,
+  "legacy_plot_mode": false,
+  "ncm_time_sampling_mode": "Sans",
+  "ncm_max_samples": 32
 }

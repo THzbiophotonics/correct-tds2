@@ -12,9 +12,12 @@ __pycache__/
 
 # Historique local VSCode / plugins
 .history/
+.pytest_cache/
+.ruff_cache/
 
 # Dossier Exemple
 Exemple/
+tests/
 
 # Données volumineuses / temporaires
 *.h5

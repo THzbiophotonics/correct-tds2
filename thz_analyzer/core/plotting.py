@@ -1,20 +1,29 @@
 from __future__ import annotations
 
-from itertools import cycle
-from typing import Iterable, Sequence
+from typing import Iterable
 
+import holoviews as hv
 import numpy as np
 from bokeh.events import MouseLeave, MouseMove, Tap
-from bokeh.layouts import column, row
-from bokeh.models import Band, ColumnDataSource, CustomJS, WheelZoomTool
+from bokeh.models import Band, ColumnDataSource, CustomJS, HoverTool, Span, WheelZoomTool
+from bokeh.models.formatters import PrintfTickFormatter
 from bokeh.plotting import figure
-
-from theme import (
-    ALASKA_BLUE,
-    ALASKA_PALETTE,
-    ALASKA_PRIMARY,
-    ALASKA_SECONDARY,
-)
+try:
+    from ..theme import (
+        ALASKA_BLUE,
+        ALASKA_NAVY,
+        ALASKA_PRIMARY,
+        ALASKA_SECONDARY,
+        ALASKA_YELLOW,
+    )
+except ImportError:
+    from theme import (
+        ALASKA_BLUE,
+        ALASKA_NAVY,
+        ALASKA_PRIMARY,
+        ALASKA_SECONDARY,
+        ALASKA_YELLOW,
+    )
 
 _DEFAULT_HEIGHT = 300
 _DEFAULT_WIDTH = None
@@ -26,11 +35,10 @@ def _to_np(values) -> np.ndarray:
         return None
     try:
         import jax.numpy as jnp  # type: ignore
-
-        if isinstance(values, jnp.ndarray):
-            return np.asarray(values)
-    except Exception:
-        pass
+    except ImportError:
+        jnp = None  # type: ignore[assignment]
+    if jnp is not None and isinstance(values, jnp.ndarray):  # type: ignore[arg-type]
+        return np.asarray(values)
     return np.asarray(values)
 
 
@@ -71,6 +79,9 @@ def _set_legend_visibility(p, visible):
 
 def _attach_click_wheel_zoom(p):
     """Wheel zoom enabled only after click to avoid stealing page scroll."""
+    if getattr(p, "_click_wheel_zoom_attached", False):
+        p.toolbar.active_scroll = None
+        return
     toolbar = p.toolbar
     wheel = next((tool for tool in toolbar.tools if isinstance(tool, WheelZoomTool)), None)
     if wheel is None:
@@ -85,6 +96,7 @@ def _attach_click_wheel_zoom(p):
         MouseLeave,
         CustomJS(args=dict(toolbar=toolbar), code="toolbar.active_scroll = null;"),
     )
+    setattr(p, "_click_wheel_zoom_attached", True)
 
 
 def _attach_mouse_coordinate_tracker(p, title, x_label, y_label):
@@ -153,7 +165,7 @@ def set_mouse_coordinate_visibility(plot, enabled):
     if not enabled and base_title is not None:
         plot.title.text = base_title
     if enabled and base_title is not None:
-        # Ensure we start from a clean title until the next mouse event updates it.
+        # Reset the title until the next mouse move.
         plot.title.text = base_title
 
 
@@ -169,7 +181,7 @@ def make_figure(
         title=title,
         height=height,
         width=width,
-        tools="pan,box_zoom,reset,save",
+        tools="pan,box_zoom,reset,save,hover",
         active_scroll=None,
     )
     if width is None and sizing_mode:
@@ -177,6 +189,14 @@ def make_figure(
     p = figure(**figure_kwargs)
     p.xaxis.axis_label = x_label
     p.yaxis.axis_label = y_label
+    hover_tool = next((tool for tool in p.tools if isinstance(tool, HoverTool)), None)
+    if hover_tool is None:
+        hover_tool = HoverTool()
+        p.add_tools(hover_tool)
+    hover_tool.tooltips = [
+        (x_label or "x", "$x{0.000e+00}"),
+        (y_label or "y", "$y{0.000e+00}"),
+    ]
     _attach_click_wheel_zoom(p)
     _attach_mouse_coordinate_tracker(p, title, x_label, y_label)
     return p
@@ -238,14 +258,36 @@ def _add_band(p, x, lower, upper, *, color, alpha=0.15):
     p.add_layout(band)
 
 
-def _color_sequence():
-    return cycle(ALASKA_PALETTE)
-
-
-def build_filter_plot(x, y, *, title, x_label, y_label, color=ALASKA_PRIMARY):
+def build_filter_plot(
+    x,
+    y,
+    *,
+    title,
+    x_label,
+    y_label,
+    color=ALASKA_PRIMARY,
+    overlay_x=None,
+    overlay_y=None,
+    overlay_label="Loaded signal (norm)",
+    overlay_color=ALASKA_BLUE,
+):
     p = make_figure(title, x_label, y_label, height=200)
-    _add_line(p, x, y, label=None, color=color)
-    _set_legend_visibility(p, False)
+    _add_line(p, x, y, label="Filter mask", color=color, line_width=2)
+    if overlay_x is not None and overlay_y is not None:
+        _add_line(
+            p,
+            overlay_x,
+            overlay_y,
+            label=overlay_label,
+            color=overlay_color,
+            line_dash="dashed",
+            line_width=2,
+        )
+        _set_legend_visibility(p, True)
+    else:
+        _set_legend_visibility(p, False)
+    p.y_range.start = 0.0
+    p.y_range.end = 1.05
     return p
 
 
@@ -261,7 +303,6 @@ def build_time_domain_plot(
     x_label="Time",
     y_label="Amplitude",
 ):
-    color_cycle = _color_sequence()
     p = make_figure(title, x_label, y_label, height=360, sizing_mode="stretch_both")
     mean_color = ALASKA_PRIMARY
     ref_color = ALASKA_BLUE
@@ -297,12 +338,23 @@ def build_time_std_plot(
         _add_line(p, time_axis, corrected_std, label="Corrected", color=ALASKA_BLUE)
     return p
 
-def build_freq_domain_plot( freqs, mean_spec, *, ref_spec=None, corrected_spec=None, title="Spectra", x_label="Frequency [Hz]", y_label="E", ): 
-    p = make_figure(title, x_label, y_label, height=320, sizing_mode="stretch_both") 
-    _add_line(p, freqs, mean_spec, label="Mean", color=ALASKA_PRIMARY) 
-    if ref_spec is not None: 
-        _add_line(p, freqs, ref_spec, label="Reference", color=ALASKA_BLUE) 
-    if corrected_spec is not None: _add_line(p, freqs, corrected_spec, label="Corrected", color=ALASKA_SECONDARY) 
+
+def build_freq_domain_plot(
+    freqs,
+    mean_spec,
+    *,
+    ref_spec=None,
+    corrected_spec=None,
+    title="Spectra",
+    x_label="Frequency [Hz]",
+    y_label="E",
+):
+    p = make_figure(title, x_label, y_label, height=320, sizing_mode="stretch_both")
+    _add_line(p, freqs, mean_spec, label="Mean", color=ALASKA_PRIMARY)
+    if ref_spec is not None:
+        _add_line(p, freqs, ref_spec, label="Reference", color=ALASKA_BLUE)
+    if corrected_spec is not None:
+        _add_line(p, freqs, corrected_spec, label="Corrected", color=ALASKA_SECONDARY)
     return p
 
 
@@ -349,7 +401,7 @@ def build_parameter_plot(
     title="Parameter",
     y_label="Value",
 ):
-    p = make_figure(title, "Trace index", y_label, height=300, width=450)
+    p = make_figure(title, "Trace index", y_label, height=280, sizing_mode="stretch_both")
     _add_line(p, indices, values, label="Value", color=ALASKA_BLUE)
     _add_scatter(p, indices, values, label=None, color=ALASKA_BLUE, marker="circle", size=5)
     if reference_index is not None:
@@ -366,3 +418,360 @@ def build_parameter_plot(
         )
     return p
 
+
+def build_parameter_histogram(
+    values,
+    *,
+    title="Coefficient a histogram",
+    x_label="Count",
+    y_label="Coefficient a",
+    bins="auto",
+):
+    """Build a histogram for one correction-parameter distribution."""
+    p = make_figure(title, x_label, y_label, height=280, sizing_mode="stretch_both")
+
+    values_np = np.asarray(_to_np(values), dtype=np.float64).ravel()
+    values_np = values_np[np.isfinite(values_np)]
+    if values_np.size == 0:
+        return p
+
+    if values_np.size == 1:
+        center = float(values_np[0])
+        width = max(abs(center) * 0.05, 1e-6)
+        edges = np.array([center - width, center + width], dtype=np.float64)
+        counts = np.array([1.0], dtype=np.float64)
+    else:
+        if bins == "auto":
+            bin_count = int(np.clip(np.sqrt(values_np.size), 8, 40))
+        else:
+            bin_count = max(1, int(bins))
+        counts, edges = np.histogram(values_np, bins=bin_count)
+
+    source = ColumnDataSource(
+        data={
+            "left": np.zeros_like(counts, dtype=float),
+            "right": counts.astype(float),
+            "bottom": edges[:-1],
+            "top": edges[1:],
+        }
+    )
+    p.quad(
+        top="top",
+        bottom="bottom",
+        left="left",
+        right="right",
+        source=source,
+        fill_color=ALASKA_BLUE,
+        fill_alpha=0.55,
+        line_color=ALASKA_NAVY,
+        line_width=1,
+    )
+
+    mean_value = float(np.mean(values_np))
+    median_value = float(np.median(values_np))
+    p.add_layout(
+        Span(
+            location=mean_value,
+            dimension="width",
+            line_color=ALASKA_PRIMARY,
+            line_dash="dashed",
+            line_width=2,
+        )
+    )
+    p.add_layout(
+        Span(
+            location=median_value,
+            dimension="width",
+            line_color=ALASKA_SECONDARY,
+            line_dash="dotdash",
+            line_width=2,
+        )
+    )
+    p.x_range.start = 0
+    return p
+
+
+_MATRIX_EPS = 1e-20
+_MATRIX_MAX_RENDER_SAMPLES = 512
+_ALASKA_SEQ_CMAP = [ALASKA_NAVY, ALASKA_BLUE, ALASKA_YELLOW, ALASKA_SECONDARY]
+_ALASKA_DIVERGING_CMAP = [ALASKA_BLUE, "#F7F7F7", ALASKA_PRIMARY]
+
+
+def _coerce_square_matrix_for_plot(values, *, name: str) -> np.ndarray:
+    """Coerce to a square float64 matrix without rescanning huge arrays."""
+    matrix = np.asarray(_to_np(values), dtype=np.float64)
+    if matrix.ndim != 2:
+        raise ValueError(f"{name} must be 2D, got shape {matrix.shape}")
+    if matrix.size == 0:
+        raise ValueError(f"{name} must not be empty")
+    if matrix.shape[0] != matrix.shape[1]:
+        raise ValueError(f"{name} must be square, got {matrix.shape}")
+    return matrix
+
+
+def _prepare_matrix_for_display(
+    matrix: np.ndarray,
+    *,
+    max_render_samples: int = _MATRIX_MAX_RENDER_SAMPLES,
+) -> tuple[np.ndarray, np.ndarray, str | None]:
+    """Limit matrix display resolution to keep Panel/Bokeh responsive."""
+    n = int(matrix.shape[0])
+    max_render = max(8, int(max_render_samples))
+    if n <= max_render:
+        axis = np.arange(n, dtype=np.float64)
+        return np.asarray(matrix), axis, None
+
+    stride = max(1, int(np.ceil(n / max_render)))
+    sampled = np.asarray(matrix[::stride, ::stride])
+    axis = np.arange(sampled.shape[0], dtype=np.float64) * float(stride)
+    note = f"x{stride} {sampled.shape[0]}/{n}"
+    return sampled, axis, note
+
+
+def _transform_matrix_for_scale(
+    matrix: np.ndarray,
+    *,
+    scale: str,
+    base_label: str,
+) -> tuple[np.ndarray, str]:
+    """Apply the selected matrix display scale."""
+    scale_key = (scale or "log").lower()
+    if scale_key == "linear":
+        return matrix, base_label
+    if scale_key == "log":
+        return np.log10(np.abs(matrix) + _MATRIX_EPS), f"log10|{base_label}|"
+    if scale_key == "symlog":
+        return np.sign(matrix) * np.log10(np.abs(matrix) + 1.0), f"symlog({base_label})"
+    raise ValueError("scale must be one of {'linear', 'log', 'symlog'}.")
+
+
+def _build_matrix_heatmap(
+    matrix: np.ndarray,
+    *,
+    scale: str,
+    title: str,
+    base_label: str,
+    cmap,
+) -> hv.Image:
+    """Internal helper to build an interactive heatmap with Alaska styling."""
+    matrix, axis, display_note = _prepare_matrix_for_display(matrix)
+    if not np.all(np.isfinite(matrix)):
+        raise ValueError(f"{base_label} contains NaN or inf in displayed samples")
+    abs_matrix = np.abs(matrix)
+    near_zero_threshold = 1e-10 * max(1.0, float(np.max(abs_matrix)))
+    display_sparsity = float(np.mean(abs_matrix <= near_zero_threshold))
+    title = f"{title} ({display_sparsity:.1%} sparse)"
+    if display_note:
+        title = f"{title} [{display_note}]"
+
+    transformed, clabel = _transform_matrix_for_scale(
+        matrix,
+        scale=scale,
+        base_label=base_label,
+    )
+    image = hv.Image(
+        (axis, axis, transformed),
+        kdims=["Sample i", "Sample j"],
+        vdims=[clabel],
+    ).opts(
+        cmap=cmap,
+        colorbar=True,
+        colorbar_opts={"formatter": PrintfTickFormatter(format="%.2e")},
+        aspect="equal",
+        frame_width=300,
+        frame_height=300,
+        responsive=False,
+        default_tools=["pan", "wheel_zoom", "box_zoom", "reset", "save"],
+        tools=["hover"],
+        active_tools=[],
+        toolbar="above",
+        title=title,
+        invert_yaxis=True,  # Keep the matrix origin at the top left.
+    )
+    return image
+
+
+def build_ncm_heatmap(
+    ncm,
+    scale: str = "log",
+    title: str = "Noise Covariance Matrix",
+) -> hv.Image:
+    """Build the NCM heatmap."""
+    matrix = _coerce_square_matrix_for_plot(ncm, name="ncm")
+    return _build_matrix_heatmap(
+        matrix,
+        scale=scale,
+        title=title,
+        base_label="NCM",
+        cmap=_ALASKA_SEQ_CMAP,
+    )
+
+
+def build_precision_heatmap(
+    precision,
+    scale: str = "log",
+    title: str = "Precision Matrix",
+) -> hv.Image:
+    """Build the precision heatmap."""
+    matrix = _coerce_square_matrix_for_plot(precision, name="precision")
+    return _build_matrix_heatmap(
+        matrix,
+        scale=scale,
+        title=title,
+        base_label="Precision",
+        cmap=_ALASKA_DIVERGING_CMAP,
+    )
+
+
+def build_matrix_value_histogram(
+    matrix,
+    *,
+    scale: str = "log",
+    title: str = "Matrix value distribution",
+    base_label: str = "Matrix",
+    color: str = ALASKA_BLUE,
+):
+    """Build a histogram of displayed matrix values."""
+    matrix_np = _coerce_square_matrix_for_plot(matrix, name=base_label.lower())
+    displayed_matrix, _, display_note = _prepare_matrix_for_display(matrix_np)
+    transformed, value_label = _transform_matrix_for_scale(
+        displayed_matrix,
+        scale=scale,
+        base_label=base_label,
+    )
+    values = np.asarray(transformed, dtype=np.float64).ravel()
+    values = values[np.isfinite(values)]
+    if values.size == 0:
+        values = np.array([0.0], dtype=np.float64)
+
+    if np.allclose(values, values[0]):
+        edges = np.array([values[0] - 0.5, values[0] + 0.5], dtype=np.float64)
+        counts = np.array([values.size], dtype=np.float64)
+    else:
+        bins = int(np.clip(np.sqrt(values.size), 16, 80))
+        counts, edges = np.histogram(values, bins=bins)
+
+    hist_title = title
+    if display_note:
+        hist_title = f"{hist_title} [{display_note}]"
+
+    return hv.Histogram(
+        (edges, counts),
+        kdims=[value_label],
+        vdims=["Count"],
+    ).opts(
+        frame_width=320,
+        frame_height=220,
+        responsive=False,
+        color=color,
+        alpha=0.85,
+        line_color=ALASKA_NAVY,
+        line_width=1,
+        default_tools=["pan", "wheel_zoom", "box_zoom", "reset", "save"],
+        tools=["hover"],
+        active_tools=[],
+        toolbar="above",
+        title=hist_title,
+    )
+
+
+def _safe_eigvals(values) -> np.ndarray:
+    """Return sorted finite eigenvalues (descending), or a safe fallback."""
+    arr = np.asarray(values if values is not None else [], dtype=np.float64).ravel()
+    arr = arr[np.isfinite(arr)]
+    if arr.size == 0:
+        return np.array([0.0], dtype=np.float64)
+    return np.sort(arr)[::-1]
+
+
+def _build_eigen_histogram(
+    eigvals: np.ndarray,
+    *,
+    condition_number: float,
+    rank: int,
+    title: str,
+    color: str,
+):
+    """Build one eigenvalue histogram with condition-marker overlay."""
+    eig_abs = np.abs(eigvals)
+    log_eigs = np.log10(eig_abs + _MATRIX_EPS)
+    if np.allclose(log_eigs, log_eigs[0]):
+        edges = np.array([log_eigs[0] - 0.5, log_eigs[0] + 0.5], dtype=np.float64)
+        counts = np.array([log_eigs.size], dtype=np.float64)
+    else:
+        bins = int(np.clip(np.sqrt(log_eigs.size) * 3, 12, 80))
+        counts, edges = np.histogram(log_eigs, bins=bins)
+    hist = hv.Histogram(
+        (edges, counts),
+        kdims=["log10|eigenvalue|"],
+        vdims=["Count"],
+    ).opts(
+        responsive=True,
+        color=color,
+        alpha=0.85,
+        line_color=ALASKA_NAVY,
+        line_width=1,
+        logy=True,
+        default_tools=["pan", "wheel_zoom", "box_zoom", "reset", "save"],
+        tools=["hover"],
+        active_tools=[],
+        title=f"{title} | rank={int(rank)} | cond={condition_number:.2e}",
+    )
+    if np.isfinite(condition_number) and condition_number > 0:
+        max_abs = float(np.max(eig_abs))
+        min_abs_est = max_abs / condition_number
+        if np.isfinite(min_abs_est):
+            cond_line = hv.VLine(np.log10(min_abs_est + _MATRIX_EPS)).opts(
+                color=ALASKA_SECONDARY,
+                line_width=2,
+                line_dash="dashed",
+            )
+            return hist * cond_line
+    return hist
+
+
+def build_eigenvalue_plot(diagnostics) -> hv.Layout:
+    """Build the eigenvalue histograms."""
+    diagnostics = diagnostics or {}
+    ncm_diag = diagnostics.get("ncm", {}) if isinstance(diagnostics, dict) else {}
+    prec_diag = diagnostics.get("precision", {}) if isinstance(diagnostics, dict) else {}
+
+    ncm_eigs = _safe_eigvals(ncm_diag.get("eigenvalues"))
+    prec_eigs = _safe_eigvals(prec_diag.get("eigenvalues"))
+
+    ncm_cond = float(ncm_diag.get("condition_number", np.nan))
+    prec_cond = float(prec_diag.get("condition_number", np.nan))
+    ncm_rank = int(ncm_diag.get("rank", np.sum(np.abs(ncm_eigs) > 1e-12)))
+    prec_rank = int(prec_diag.get("rank", np.sum(np.abs(prec_eigs) > 1e-12)))
+
+    ncm_hist = _build_eigen_histogram(
+        ncm_eigs,
+        condition_number=ncm_cond,
+        rank=ncm_rank,
+        title="NCM eigenvalues",
+        color=ALASKA_BLUE,
+    )
+    prec_hist = _build_eigen_histogram(
+        prec_eigs,
+        condition_number=prec_cond,
+        rank=prec_rank,
+        title="Precision eigenvalues",
+        color=ALASKA_PRIMARY,
+    )
+    return (ncm_hist + prec_hist).cols(2)
+
+
+def build_matrix_comparison(ncm, precision) -> hv.Layout:
+    """Build a 2x2 view of the covariance and precision matrices."""
+    ncm_arr = _coerce_square_matrix_for_plot(ncm, name="ncm")
+    precision_arr = _coerce_square_matrix_for_plot(precision, name="precision")
+    if ncm_arr.shape != precision_arr.shape:
+        raise ValueError(
+            "ncm and precision must have matching shapes, "
+            f"got {ncm_arr.shape} and {precision_arr.shape}."
+        )
+    ncm_linear = build_ncm_heatmap(ncm_arr, scale="linear", title="Noise Covariance Matrix (linear)")
+    ncm_log = build_ncm_heatmap(ncm_arr, scale="log", title="Noise Covariance Matrix (log)")
+    prec_linear = build_precision_heatmap(precision_arr, scale="linear", title="Precision Matrix (linear)")
+    prec_log = build_precision_heatmap(precision_arr, scale="symlog", title="Precision Matrix (log)")
+    return (ncm_linear + ncm_log + prec_linear + prec_log).cols(2)
