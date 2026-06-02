@@ -3,7 +3,13 @@ import gc
 from pathlib import Path
 import traceback
 
+# JAX configuration — must happen before any JAX computation.
+# x64: enables float64 (required for numerically stable NCM inversion).
+# persistent_cache: saves XLA compilations to disk so restarts skip recompilation.
 import jax
+jax.config.update("jax_enable_x64", True)
+jax.config.update("jax_compilation_cache_dir", str(Path.home() / ".cache" / "jax_xla_thz"))
+
 import jax.numpy as jnp
 import numpy as np
 import panel as pn
@@ -17,9 +23,9 @@ from core.batching import BatchLinker
 from core.estimator import CovarianceEstimator
 from core.filters import (
     apply_frequency_filter,
-    _compute_mask,
+    build_frequency_mask,
     apply_time_filter,
-    _compute_time_mask,
+    build_time_mask,
     fft_mag_correct_tds,
 )
 from core.jax_ops import (
@@ -28,11 +34,14 @@ from core.jax_ops import (
     batch_losses,
     compute_superresolution_npadded,
     LASER_FREP_HZ,
+    rfft_angular_freqs,
+    squash_to_bounds,
+)
+from core.optimizer import (
     infer_initial_lr,
     make_optax_optimizer,
     optax_step,
     optax_train_block,
-    squash_to_bounds,
 )
 from core.correction import CorrectionModel
 from core.covariance import (
@@ -62,6 +71,24 @@ notifications = getattr(pn.state, "notifications", None)
 if notifications is not None:
     notifications.position = "bottom-right"
 CONFIG_FILE = Path("config_filters.json")
+
+
+def _warmup_jax() -> None:
+    """Trigger JAX startup with tiny arrays so the first real computation is fast."""
+    try:
+        _t = jnp.linspace(0.0, 1e-12, 16)
+        _p = jnp.zeros((4, 3))
+        _pulses = jnp.zeros((4, 16))
+        _ref = jnp.zeros(16)
+        _om = rfft_angular_freqs(_t)
+        _lo = jnp.array([-1e-12, -0.1, -0.1])
+        _hi = jnp.array([1e-12, 0.1, 0.1])
+        batch_gradients(_p, _pulses, _ref, _t, _om, _lo, _hi).block_until_ready()
+    except Exception:
+        pass  # warmup is best-effort; never crash the app startup
+
+
+_warmup_jax()
 
 class THzOptimizerApp:
     @staticmethod
@@ -313,27 +340,7 @@ class THzOptimizerApp:
             trace_count = 1000
         trace_count = max(1, trace_count)
         legacy_mode = bool(cfg.get("legacy_plot_mode", False))
-        try:
-            quality_speed_cfg = float(cfg.get("quality_speed", 0.45))
-        except (TypeError, ValueError):
-            quality_speed_cfg = 0.45
-        quality_speed_cfg = float(np.clip(quality_speed_cfg, 0.0, 1.0))
-
         self.maxiter = pn.widgets.IntInput(name="Iterations (Adam)", value=1000, step=50)
-        self.quality_speed = pn.widgets.FloatSlider(
-            name="",
-            value=quality_speed_cfg,
-            start=0.0,
-            end=1.0,
-            step=0.01,
-            show_value=False,
-        )
-        self.quality_speed_labels = pn.Row(
-            pn.pane.Markdown("fast"),
-            pn.layout.HSpacer(),
-            pn.pane.Markdown("quality"),
-            sizing_mode="stretch_width",
-        )
         self.lr = pn.widgets.FloatInput(
             name="Learning rate (auto)",
             value=0.0,
@@ -346,7 +353,6 @@ class THzOptimizerApp:
             options=["cosine", "exp", "piecewise"],
             value="cosine",
         )
-        self.subsample = pn.widgets.IntSlider(name="Sub-sampling (x)", value=1, start=1, end=8, step=1)
         self.opt_trace_mode = pn.widgets.RadioButtonGroup(
             name="Traces to optimize",
             options=["All", "Limit"],
@@ -565,7 +571,6 @@ class THzOptimizerApp:
         self.opt_trace_mode.param.watch(self._on_trace_mode_change, "value")
         self.opt_trace_mode.param.watch(self.save_config, "value")
         self.opt_trace_count.param.watch(self.save_config, "value")
-        self.quality_speed.param.watch(self.save_config, "value")
         self.legacy_plot_mode.param.watch(self.save_config, "value")
         self.superresolution_toggle.param.watch(self._update_superres_info, "value")
         self._update_superres_info()
@@ -632,13 +637,10 @@ class THzOptimizerApp:
                 pn.layout.Divider(),
                 pn.pane.Markdown("### Optimization"),
                 pn.Row(self.btn_cpu, self.btn_gpu),
-                self.subsample,
                 self.opt_trace_mode,
                 self.opt_trace_count,
                 self.legacy_plot_mode,
                 self.maxiter,
-                self.quality_speed_labels,
-                self.quality_speed,
                 self.lr,
                 self.scheduler_type,
                 self.ncm_settings_panel,
@@ -799,7 +801,6 @@ class THzOptimizerApp:
                 periodic_freq_thz=float(self.periodic_freq.value),
                 opt_trace_mode=str(self.opt_trace_mode.value) if hasattr(self, "opt_trace_mode") else "All",
                 opt_trace_count=int(self.opt_trace_count.value) if hasattr(self, "opt_trace_count") else 1000,
-                quality_speed=float(self.quality_speed.value) if hasattr(self, "quality_speed") else 0.45,
                 legacy_plot_mode=bool(self.legacy_plot_mode.value) if hasattr(self, "legacy_plot_mode") else False,
                 ncm_time_sampling_mode=(
                     str(self.ncm_time_sampling_mode.value) if hasattr(self, "ncm_time_sampling_mode") else "Max"
@@ -911,7 +912,7 @@ class THzOptimizerApp:
                 freqs_np = loaded_freqs
             else:
                 freqs_np = np.linspace(0, 10e12, 1200)
-            mask_freq = _compute_mask(
+            mask_freq = build_frequency_mask(
                 freqs_np,
                 self.filter_low.value,
                 self.filter_high.value,
@@ -966,7 +967,7 @@ class THzOptimizerApp:
                 t_axis = loaded_time
             else:
                 t_axis = np.linspace(0, 10e-12, 1200)
-            mask_time = _compute_time_mask(
+            mask_time = build_time_mask(
                 t_axis,
                 bool(self.tfilter_low.value),
                 bool(self.tfilter_high.value),
@@ -1363,7 +1364,7 @@ class THzOptimizerApp:
 
     def _apply_freq_filter_to_pulses(self, pulses_array, freqs):
         """Apply the current frequency mask to a batch of pulses (time domain)."""
-        mask = _compute_mask(np.asarray(freqs), *self._filter_config())
+        mask = build_frequency_mask(np.asarray(freqs), *self._filter_config())
         spectrum = np.fft.rfft(pulses_array, axis=1)
         return np.fft.irfft(spectrum * mask, n=pulses_array.shape[1], axis=1)
 
@@ -1690,19 +1691,8 @@ class THzOptimizerApp:
         return device, exact_device, lower_bounds, upper_bounds, parameter_matrix
 
     def _subsample_data_for_optimization(self, all_pulses, reference_pulse, time_vector, angular_frequencies):
-        """Apply time-axis decimation and optional trace-count limiting for optimization."""
+        """Apply optional trace-count limiting for optimization."""
         n_traces = int(all_pulses.shape[0])
-
-        subsample_factor = max(1, int(self.subsample.value))
-        subsample_slice = slice(None, None, subsample_factor)
-        sub_time_vector = time_vector[subsample_slice]
-        subsampled_pulses = all_pulses[:, subsample_slice]
-        subsampled_reference = reference_pulse[subsample_slice]
-        base_dt = float(self.time[1] - self.time[0])
-        freq_subsampled_dt = base_dt * subsample_factor
-        sub_angular_frequencies = (
-            jnp.fft.rfftfreq(sub_time_vector.shape[0], d=freq_subsampled_dt).astype(jnp.float32) * (2 * jnp.pi)
-        )
 
         indices = None
         if hasattr(self, "opt_trace_mode") and str(self.opt_trace_mode.value) == "Limit":
@@ -1715,10 +1705,10 @@ class THzOptimizerApp:
                     level="warning",
                     duration=5000,
                 )
-                subsampled_pulses = subsampled_pulses[indices]
+                all_pulses = all_pulses[indices]
 
         self._optimization_trace_indices = indices
-        return subsampled_pulses, subsampled_reference, sub_time_vector, sub_angular_frequencies, indices
+        return all_pulses, reference_pulse, time_vector, angular_frequencies, indices
 
     def _run_optimization_loop(
         self,
@@ -1735,23 +1725,15 @@ class THzOptimizerApp:
         num_iterations = int(getattr(getattr(self, "max_iterations", None), "value", self.maxiter.value))
         schedule_type = str(getattr(getattr(self, "schedule_type", None), "value", self.scheduler_type.value))
 
-        quality_widget = getattr(self, "quality_speed", None)
-        try:
-            quality_speed = float(getattr(quality_widget, "value", 0.45))
-        except (TypeError, ValueError):
-            quality_speed = 0.45
-        quality_speed = float(np.clip(quality_speed, 0.0, 1.0))
-
-        min_iters_ratio = 0.08 + (0.62 * quality_speed)  
+        min_iters_ratio = 0.514  # quality_speed=0.7 equivalent: good convergence, still early-stops
         min_iters = max(1, min(num_iterations, int(round(min_iters_ratio * num_iterations))))
-        patience = int(np.clip(round(2 + (4 * quality_speed)), 2, 6))
-        tol_rel = float(2.5e-3 - (2.0e-3 * quality_speed))  
+        patience = 5
+        tol_rel = 1.1e-3
 
-        self._set_metric("speed_quality", quality_speed)
         self._set_metric("min_iters_gate", int(min_iters))
         self._set_metric("patience_gate", int(patience))
         self._set_metric("tol_rel_base", tol_rel)
-        check_every = 10
+        check_every = 20  # fewer GPU-CPU syncs → faster on GPU
 
         trace_indices = getattr(self, "_optimization_trace_indices", None)
         working_params = parameter_matrix if trace_indices is None else parameter_matrix[trace_indices]
@@ -1961,6 +1943,17 @@ class THzOptimizerApp:
         auto_tol = None
         final_iteration = num_iterations
 
+        # Flat-landscape detection: when traces are already nearly identical to reference
+        # (SNR >> 1), the initial loss is tiny, gradients ≈ noise, and Adam drifts.
+        # Reduce min_iters so early stopping can trigger before the drift accumulates.
+        _initial_losses = _compute_losses(working_params)
+        _initial_mean_loss = float(jnp.mean(_initial_losses))
+        if _initial_mean_loss < 0.05:
+            flat_min = max(50, num_iterations // 20)
+            if flat_min < min_iters:
+                min_iters = flat_min
+                self._set_metric("flat_landscape_min_iters", int(min_iters))
+
         def _check_progress(params_matrix, iteration):
             nonlocal prev_check_loss, small_improve_streak, last_rel_improvement
             nonlocal ref_rel_improvement, auto_tol, final_iteration
@@ -2129,7 +2122,9 @@ class THzOptimizerApp:
                 ncm_max_samples = max(32, int(self.ncm_max_samples.value)) if hasattr(self, "ncm_max_samples") else 800
             else:
                 ncm_time_mode = "Max"
-                ncm_max_samples = int(n_samples_full)
+                # n_samples²×8 bytes for float64; cap so the matrix fits in ~500 MB
+                _max_safe = max(32, int((500e6 / 8) ** 0.5))  # ≈7906
+                ncm_max_samples = min(int(n_samples_full), _max_safe)
             ncm_stride = max(1, int(np.ceil(n_samples_full / ncm_max_samples)))
             corrected_np = corrected_np_full[:, ::ncm_stride]
             estimator = CovarianceEstimator(

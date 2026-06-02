@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Any, Iterable
+
+# Lazy type alias — `from __future__ import annotations` prevents runtime resolution.
+BokehFigure = Any
 
 import holoviews as hv
 import numpy as np
@@ -153,7 +156,7 @@ def _attach_mouse_coordinate_tracker(p, title, x_label, y_label):
     setattr(p, "_cursor_coord_title", base_title)
 
 
-def set_mouse_coordinate_visibility(plot, enabled):
+def set_mouse_coordinate_visibility(plot: BokehFigure | None, enabled: bool) -> None:
     """Toggle the custom cursor-coordinate overlay for a Bokeh plot."""
     if plot is None:
         return
@@ -170,13 +173,13 @@ def set_mouse_coordinate_visibility(plot, enabled):
 
 
 def make_figure(
-    title,
-    x_label,
-    y_label,
-    height=_DEFAULT_HEIGHT,
-    width=_DEFAULT_WIDTH,
-    sizing_mode="stretch_width",
-):
+    title: str,
+    x_label: str,
+    y_label: str,
+    height: int = _DEFAULT_HEIGHT,
+    width: int | None = _DEFAULT_WIDTH,
+    sizing_mode: str = "stretch_width",
+) -> BokehFigure:
     figure_kwargs = dict(
         title=title,
         height=height,
@@ -259,18 +262,18 @@ def _add_band(p, x, lower, upper, *, color, alpha=0.15):
 
 
 def build_filter_plot(
-    x,
-    y,
+    x: Any,
+    y: Any,
     *,
-    title,
-    x_label,
-    y_label,
-    color=ALASKA_PRIMARY,
-    overlay_x=None,
-    overlay_y=None,
-    overlay_label="Loaded signal (norm)",
-    overlay_color=ALASKA_BLUE,
-):
+    title: str,
+    x_label: str,
+    y_label: str,
+    color: str = ALASKA_PRIMARY,
+    overlay_x: Any = None,
+    overlay_y: Any = None,
+    overlay_label: str = "Loaded signal (norm)",
+    overlay_color: str = ALASKA_BLUE,
+) -> BokehFigure:
     p = make_figure(title, x_label, y_label, height=200)
     _add_line(p, x, y, label="Filter mask", color=color, line_width=2)
     if overlay_x is not None and overlay_y is not None:
@@ -292,17 +295,17 @@ def build_filter_plot(
 
 
 def build_time_domain_plot(
-    time_axis,
-    mean,
-    std=None,
+    time_axis: Any,
+    mean: Any,
+    std: Any = None,
     *,
-    reference=None,
-    corrected_mean=None,
-    corrected_std=None,
-    title="Time pulses",
-    x_label="Time",
-    y_label="Amplitude",
-):
+    reference: Any = None,
+    corrected_mean: Any = None,
+    corrected_std: Any = None,
+    title: str = "Time pulses",
+    x_label: str = "Time",
+    y_label: str = "Amplitude",
+) -> BokehFigure:
     p = make_figure(title, x_label, y_label, height=360, sizing_mode="stretch_both")
     mean_color = ALASKA_PRIMARY
     ref_color = ALASKA_BLUE
@@ -324,14 +327,14 @@ def build_time_domain_plot(
 
 
 def build_time_std_plot(
-    time_axis,
-    raw_std,
+    time_axis: Any,
+    raw_std: Any,
     *,
-    corrected_std=None,
-    title="Temporal standard deviation",
-    x_label="Time",
-    y_label="Std",
-):
+    corrected_std: Any = None,
+    title: str = "Temporal standard deviation",
+    x_label: str = "Time",
+    y_label: str = "Std",
+) -> BokehFigure:
     p = make_figure(title, x_label, y_label, height=320, sizing_mode="stretch_both")
     _add_line(p, time_axis, raw_std, label="Raw", color=ALASKA_PRIMARY)
     if corrected_std is not None:
@@ -340,15 +343,15 @@ def build_time_std_plot(
 
 
 def build_freq_domain_plot(
-    freqs,
-    mean_spec,
+    freqs: Any,
+    mean_spec: Any,
     *,
-    ref_spec=None,
-    corrected_spec=None,
-    title="Spectra",
-    x_label="Frequency [Hz]",
-    y_label="E",
-):
+    ref_spec: Any = None,
+    corrected_spec: Any = None,
+    title: str = "Spectra",
+    x_label: str = "Frequency [Hz]",
+    y_label: str = "E",
+) -> BokehFigure:
     p = make_figure(title, x_label, y_label, height=320, sizing_mode="stretch_both")
     _add_line(p, freqs, mean_spec, label="Mean", color=ALASKA_PRIMARY)
     if ref_spec is not None:
@@ -359,14 +362,14 @@ def build_freq_domain_plot(
 
 
 def build_freq_std_plot(
-    freqs,
-    raw_std,
+    freqs: Any,
+    raw_std: Any,
     *,
-    corrected_std=None,
-    title="Spectral standard deviation",
-    x_label="Frequency [Hz]",
-    y_label="Std",
-):
+    corrected_std: Any = None,
+    title: str = "Spectral standard deviation",
+    x_label: str = "Frequency [Hz]",
+    y_label: str = "Std",
+) -> BokehFigure:
     p = make_figure(title, x_label, y_label, height=320, sizing_mode="stretch_both")
     _add_line(p, freqs, raw_std, label="Raw", color=ALASKA_PRIMARY)
     if corrected_std is not None:
@@ -375,15 +378,15 @@ def build_freq_std_plot(
 
 
 def build_phase_plot(
-    freqs,
-    mean_phase,
+    freqs: Any,
+    mean_phase: Any,
     *,
-    ref_phase=None,
-    corrected_phase=None,
-    title="Phases",
-    x_label="Frequency [Hz]",
-    y_label="Phase",
-):
+    ref_phase: Any = None,
+    corrected_phase: Any = None,
+    title: str = "Phases",
+    x_label: str = "Frequency [Hz]",
+    y_label: str = "Phase",
+) -> BokehFigure:
     p = make_figure(title, x_label, y_label, height=320, sizing_mode="stretch_both")
     _add_line(p, freqs, mean_phase, label="Mean", color=ALASKA_PRIMARY)
     if ref_phase is not None:
@@ -394,13 +397,13 @@ def build_phase_plot(
 
 
 def build_parameter_plot(
-    indices,
-    values,
+    indices: Any,
+    values: Any,
     *,
-    reference_index=None,
-    title="Parameter",
-    y_label="Value",
-):
+    reference_index: int | None = None,
+    title: str = "Parameter",
+    y_label: str = "Value",
+) -> BokehFigure:
     p = make_figure(title, "Trace index", y_label, height=280, sizing_mode="stretch_both")
     _add_line(p, indices, values, label="Value", color=ALASKA_BLUE)
     _add_scatter(p, indices, values, label=None, color=ALASKA_BLUE, marker="circle", size=5)
@@ -592,7 +595,7 @@ def _build_matrix_heatmap(
 
 
 def build_ncm_heatmap(
-    ncm,
+    ncm: Any,
     scale: str = "log",
     title: str = "Noise Covariance Matrix",
 ) -> hv.Image:
@@ -608,7 +611,7 @@ def build_ncm_heatmap(
 
 
 def build_precision_heatmap(
-    precision,
+    precision: Any,
     scale: str = "log",
     title: str = "Precision Matrix",
 ) -> hv.Image:
@@ -624,13 +627,13 @@ def build_precision_heatmap(
 
 
 def build_matrix_value_histogram(
-    matrix,
+    matrix: Any,
     *,
     scale: str = "log",
     title: str = "Matrix value distribution",
     base_label: str = "Matrix",
     color: str = ALASKA_BLUE,
-):
+) -> hv.Histogram:
     """Build a histogram of displayed matrix values."""
     matrix_np = _coerce_square_matrix_for_plot(matrix, name=base_label.lower())
     displayed_matrix, _, display_note = _prepare_matrix_for_display(matrix_np)
@@ -730,7 +733,7 @@ def _build_eigen_histogram(
     return hist
 
 
-def build_eigenvalue_plot(diagnostics) -> hv.Layout:
+def build_eigenvalue_plot(diagnostics: dict | None) -> hv.Layout:
     """Build the eigenvalue histograms."""
     diagnostics = diagnostics or {}
     ncm_diag = diagnostics.get("ncm", {}) if isinstance(diagnostics, dict) else {}
@@ -761,7 +764,7 @@ def build_eigenvalue_plot(diagnostics) -> hv.Layout:
     return (ncm_hist + prec_hist).cols(2)
 
 
-def build_matrix_comparison(ncm, precision) -> hv.Layout:
+def build_matrix_comparison(ncm: Any, precision: Any) -> hv.Layout:
     """Build a 2x2 view of the covariance and precision matrices."""
     ncm_arr = _coerce_square_matrix_for_plot(ncm, name="ncm")
     precision_arr = _coerce_square_matrix_for_plot(precision, name="precision")
@@ -773,5 +776,5 @@ def build_matrix_comparison(ncm, precision) -> hv.Layout:
     ncm_linear = build_ncm_heatmap(ncm_arr, scale="linear", title="Noise Covariance Matrix (linear)")
     ncm_log = build_ncm_heatmap(ncm_arr, scale="log", title="Noise Covariance Matrix (log)")
     prec_linear = build_precision_heatmap(precision_arr, scale="linear", title="Precision Matrix (linear)")
-    prec_log = build_precision_heatmap(precision_arr, scale="symlog", title="Precision Matrix (log)")
+    prec_log = build_precision_heatmap(precision_arr, scale="symlog", title="Precision Matrix (symlog)")
     return (ncm_linear + ncm_log + prec_linear + prec_log).cols(2)

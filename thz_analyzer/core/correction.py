@@ -1,7 +1,8 @@
-from typing import Any, Optional, Tuple
+from typing import Any, Optional
 
 import jax
 import jax.numpy as jnp
+from numpy.typing import ArrayLike
 
 from .jax_ops import (
     apply_batch_corrections,
@@ -22,7 +23,7 @@ class CorrectionModel:
 
     def __init__(
         self,
-        time_axis,
+        time_axis: ArrayLike,
         device: Optional[Any] = None,
         superresolution: bool = False,
         frep_hz: float = LASER_FREP_HZ,
@@ -32,6 +33,7 @@ class CorrectionModel:
         freq_end: float = 1e13,
         filter_sharpness: float = 1.0,
     ):
+        """Pre-compute and upload time axis, angular frequencies, and frequency window to device."""
         self.device = self._resolve_device(device)
 
         time_jnp = jnp.asarray(time_axis)
@@ -88,9 +90,9 @@ class CorrectionModel:
 
     def prepare_inputs(
         self,
-        pulses: jnp.ndarray,
-        reference: jnp.ndarray,
-    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        pulses: ArrayLike,
+        reference: ArrayLike,
+    ) -> tuple[jax.Array, jax.Array]:
         """Pad and filter the inputs."""
         with jax.default_device(self.device):
             if self.superresolution:
@@ -108,9 +110,10 @@ class CorrectionModel:
 
     def apply(
         self,
-        pulses: jnp.ndarray,
-        params: jnp.ndarray,
-    ) -> jnp.ndarray:
+        pulses: ArrayLike,
+        params: ArrayLike,
+    ) -> jax.Array:
+        """Apply the correction to a batch of pulses with the given parameters."""
         pulses_jax = jnp.asarray(pulses)
         params_jax = jnp.asarray(params)
 
@@ -131,11 +134,12 @@ class CorrectionModel:
 
     def loss(
         self,
-        params: jnp.ndarray,
-        pulses: jnp.ndarray,
-        reference: jnp.ndarray,
-        bounds: Tuple[jnp.ndarray, jnp.ndarray],
-    ) -> jnp.ndarray:
+        params: ArrayLike,
+        pulses: ArrayLike,
+        reference: ArrayLike,
+        bounds: tuple[ArrayLike, ArrayLike],
+    ) -> jax.Array:
+        """Normalised L2 loss in the time domain after applying frequency-windowed corrections."""
         lower, upper = bounds
         pulses_filtered, ref_filtered = self.prepare_inputs(pulses, reference)
         with jax.default_device(self.device):
@@ -151,11 +155,12 @@ class CorrectionModel:
 
     def gradients(
         self,
-        params: jnp.ndarray,
-        pulses: jnp.ndarray,
-        reference: jnp.ndarray,
-        bounds: Tuple[jnp.ndarray, jnp.ndarray],
-    ) -> jnp.ndarray:
+        params: ArrayLike,
+        pulses: ArrayLike,
+        reference: ArrayLike,
+        bounds: tuple[ArrayLike, ArrayLike],
+    ) -> jax.Array:
+        """Exact gradients of the loss via JAX autodiff, one gradient vector per pulse."""
         lower, upper = bounds
         pulses_filtered, ref_filtered = self.prepare_inputs(pulses, reference)
         with jax.default_device(self.device):

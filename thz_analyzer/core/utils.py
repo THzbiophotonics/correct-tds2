@@ -24,13 +24,14 @@ def validate_square_matrix(arr: ArrayLike, name: str = "matrix") -> NDArray[np.f
     return arr
 
 
-def ensure_numpy(arr) -> np.ndarray:
+def ensure_numpy(arr: ArrayLike) -> np.ndarray:
     """Convert to NumPy."""
     return np.asarray(arr)
 
 
-def ensure_jax(arr):
+def ensure_jax(arr: ArrayLike) -> "jax.Array":
     """Convert to JAX."""
+    import jax
     import jax.numpy as jnp
 
     return jnp.asarray(arr)

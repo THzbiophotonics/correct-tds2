@@ -3,7 +3,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Optional
 
 import h5py
 import numpy as np
@@ -44,7 +44,7 @@ class PulseDataset:
         return int(np.argmin(np.abs(proximity - 1.0)))
 
 
-def load_h5_file(file_path: Path | str) -> Optional[Tuple[List[np.ndarray], np.ndarray]]:
+def load_h5_file(file_path: Path | str) -> Optional[tuple[list[np.ndarray], np.ndarray]]:
     """Load time traces from an HDF5 file."""
     try:
         with h5py.File(file_path, "r") as f:
@@ -123,8 +123,8 @@ def save_results(
     corrected_std_time: Optional[np.ndarray] = None,
     corrected_std_freq: Optional[np.ndarray] = None,
     ncm: Optional[np.ndarray] = None,
-    ncm_sample=None,
-    ncm_ref_sim=None,
+    ncm_sample: Optional[np.ndarray] = None,
+    ncm_ref_sim: Optional[np.ndarray] = None,
     precision_matrix: Optional[np.ndarray] = None,
     matrix_diagnostics: Optional[dict] = None,
     ncm_info: Optional[dict] = None,
@@ -327,6 +327,7 @@ def save_results(
         written_files.append(diag_path)
 
     return written_files
+
 
 def export_predictor(
     output_path: str,

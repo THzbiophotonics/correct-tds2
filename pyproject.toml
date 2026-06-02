@@ -1,18 +1,39 @@
 [project]
-name = "nouveau-tds"
-version = "0.1.0"
-description = ""
+name = "correct-tds2"
+version = "0.2.0"
+description = "JAX-accelerated correction tool for THz time-domain spectroscopy traces"
 authors = [
-    {name = "Florian"}
+    {name = "THzBiophotonics — IEMN CNRS"}
 ]
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.11"
+keywords = ["terahertz", "THz", "spectroscopy", "correction", "JAX", "GPU"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
 dependencies = [
+    "numpy (>=2.0.0)",
     "holoviews (>=1.21.0,<2.0.0)",
+    "bokeh (>=3.9.0)",
+    "panel (>=1.8.0)",
     "h5py (>=3.15.1,<4.0.0)",
     "scikit-learn (>=1.4.0,<2.0.0)",
-    "optax (>=0.2.7,<0.3.0)"
+    "optax (>=0.2.8,<0.3.0)",
 ]
+
+[project.urls]
+Homepage = "https://github.com/THzBiophotonics/correct-tds2"
+Repository = "https://github.com/THzBiophotonics/correct-tds2"
+
+[project.optional-dependencies]
+gpu = ["jax[cuda12]>=0.5.3"]
+cpu = ["jax[cpu]>=0.5.3"]
 
 [tool.poetry]
 packages = [{include = "thz_analyzer"}]
@@ -24,4 +45,9 @@ build-backend = "poetry.core.masonry.api"
 [dependency-groups]
 dev = [
     "pytest (>=9.0.2,<10.0.0)"
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: tests lents sur données complètes (1000 traces, N=4984) — exclure avec -m 'not slow'",
 ]

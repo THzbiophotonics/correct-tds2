@@ -1,6 +1,6 @@
 import math
 from contextlib import nullcontext
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -43,7 +43,7 @@ def _periodic_cpu_search(
     x0_norm: np.ndarray,
     random_trials: int,
     coordinate_rounds: int,
-) -> Tuple[np.ndarray, float, str]:
+) -> tuple[np.ndarray, float, str]:
     """Run the CPU search."""
     span_ps = maxval_ps - minval_ps
 
@@ -115,8 +115,8 @@ def _periodic_jax_optax_search(
     maxval_ps: np.ndarray,
     x0_norm: np.ndarray,
     mode: str,
-    device: Optional[Any] = None,
-) -> Optional[Tuple[np.ndarray, float, str]]:
+    device: Any | None = None,
+) -> tuple[np.ndarray, float, str] | None:
     """Run the JAX multi-start search."""
     try:
         import jax
@@ -159,7 +159,7 @@ def _periodic_jax_optax_search(
         span_j = jnp.asarray(span_np)
         tail_mask_j = jnp.asarray(tail_mask_np)
 
-        def loss_single(raw: jnp.ndarray) -> jnp.ndarray:
+        def loss_single(raw: "jax.Array") -> "jax.Array":
             x_norm = jax.nn.sigmoid(raw)
             x = min_j + span_j * x_norm
             ct = x[0] * jnp.cos(x[1] * time_j + x[2])
@@ -167,8 +167,8 @@ def _periodic_jax_optax_search(
             tail = jnp.fft.rfft(corrected)
             return jnp.sum(jnp.abs(tail) * tail_mask_j)
 
-        batch_loss = jax.jit(jax.vmap(loss_single))
-        batch_grad = jax.jit(jax.vmap(jax.grad(loss_single)))
+        # value_and_grad avoids a redundant forward pass: loss is free once we have grad.
+        batch_val_grad = jax.jit(jax.vmap(jax.value_and_grad(loss_single)))
 
         tx = optax.chain(
             optax.clip_by_global_norm(1.0),
@@ -181,16 +181,17 @@ def _periodic_jax_optax_search(
 
         @jax.jit
         def step(curr_params, curr_opt_state):
-            grads = batch_grad(curr_params)
+            losses_step, grads = batch_val_grad(curr_params)
             updates, next_opt_state = tx.update(grads, curr_opt_state, curr_params)
             next_params = optax.apply_updates(curr_params, updates)
-            return next_params, next_opt_state
+            return next_params, next_opt_state, losses_step
 
         ctx = jax.default_device(device) if device is not None else nullcontext()
         with ctx:
+            losses = None
             for _ in range(n_steps):
-                params, opt_state = step(params, opt_state)
-            losses = batch_loss(params)
+                params, opt_state, losses = step(params, opt_state)
+        # losses holds the per-start losses from the last step
 
         params_np = np.asarray(params)
         losses_np = np.asarray(losses)
@@ -209,8 +210,8 @@ def periodic_sampling_correct_tds(
     random_trials: int = 128,
     coordinate_rounds: int = 40,
     mode: str = "cpu",
-    device: Optional[Any] = None,
-) -> Dict[str, object]:
+    device: Any | None = None,
+) -> dict[str, object]:
     """Estimate and apply the periodic sampling correction."""
 
     mean_signal = np.asarray(mean_signal, dtype=float)

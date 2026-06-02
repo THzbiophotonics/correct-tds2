@@ -31,8 +31,8 @@ class CovarianceEstimator:
         self.chunk_size = chunk_size
 
         self.ncm: Optional[np.ndarray] = None
-        self.ncm_sample = None
-        self.ncm_ref_sim = None
+        self.ncm_sample: Optional[np.ndarray] = None
+        self.ncm_ref_sim: Optional[np.ndarray] = None
         self.precision: Optional[np.ndarray] = None
         self.info: Optional[dict] = None
         self.diagnostics: Optional[dict] = None
@@ -100,7 +100,7 @@ class CovarianceEstimator:
 
         return self
 
-    def export(self, path: str, metadata: Dict[str, Any]) -> None:
+    def export(self, path: str | Path, metadata: Dict[str, Any]) -> None:
         """Save the fitted matrices to an NPZ file."""
         if self.ncm is None or self.precision is None:
             raise RuntimeError("Must call fit() before export().")

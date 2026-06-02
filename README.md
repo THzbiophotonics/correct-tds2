@@ -12,6 +12,28 @@
     - CUDA 12.x: `poetry run pip install -U "jax[cuda12]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html`
     - CUDA 11.x: `poetry run pip install -U "jax[cuda11]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html`
 
+## Installation without Poetry
+
+If Poetry is not available, you can install directly with `pip` inside a virtual environment:
+
+```bash
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# Linux / macOS
+source .venv/bin/activate
+
+pip install numpy "holoviews>=1.21,<2" "bokeh>=3.9" "panel>=1.8" "h5py>=3.15,<4" "scikit-learn>=1.4,<2" "optax>=0.2.8,<0.3"
+
+# JAX — choose based on your machine:
+pip install -U "jax[cpu]"                                                                           # CPU only
+pip install -U "jax[cuda12]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html # GPU CUDA 12
+pip install -U "jax[cuda13]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html # GPU CUDA 13
+
+# Then launch the app
+panel serve thz_analyzer/main_app.py --show --autoreload
+```
+
 ## Launch
 
 - Start the app:
