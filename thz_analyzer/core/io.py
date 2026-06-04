@@ -107,7 +107,7 @@ def _save_series_txt(
     file_path = output_dir / f"{output_name}.txt"
     if include_header:
         header = f"{name}_axis\t{name}_value"
-        np.savetxt(file_path, data, delimiter="\t", header=header, comments="")
+        np.savetxt(file_path, data, delimiter="\t", header=header)
     else:
         np.savetxt(file_path, data, delimiter="\t")
     return file_path
@@ -221,7 +221,7 @@ def save_results(
     if params_arr.shape[1] > len(col_names):
         col_names.extend([f"param_{idx}" for idx in range(len(col_names), params_arr.shape[1])])
     header_cols = "\t".join(col_names[: params_arr.shape[1]])
-    np.savetxt(params_path, params_arr, delimiter="\t", fmt="%.6e", header=header_cols, comments="")
+    np.savetxt(params_path, params_arr, delimiter="\t", fmt="%.6e", header=header_cols)
     written_files.append(params_path)
 
     traces_h5_path = output_dir / f"{prefix}corrected_traces.h5"
