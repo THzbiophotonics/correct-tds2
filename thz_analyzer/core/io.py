@@ -75,6 +75,14 @@ def load_h5_file(file_path: Path | str) -> Optional[tuple[list[np.ndarray], np.n
         return None
 
 
+_COMMON_HEADER = (
+    "Correct-TDS2 — Periodic-sampling correction for THz-TDS\n"
+    "# Reference: Denakpo et al., IEEE Transactions on Instrumentation and Measurement, 2025.\n"
+    "# GitHub: https://github.com/THzBiophotonics/correct-tds2\n"
+    "# Validated output"
+)
+
+
 def _to_json_serializable(value: Any) -> Any:
     """Convert NumPy values to JSON-friendly objects."""
     if isinstance(value, dict):
@@ -105,11 +113,8 @@ def _save_series_txt(
     data = np.column_stack((axis_arr, values_arr))
     output_name = file_stem or name
     file_path = output_dir / f"{output_name}.txt"
-    if include_header:
-        header = f"{name}_axis\t{name}_value"
-        np.savetxt(file_path, data, delimiter="\t", header=header)
-    else:
-        np.savetxt(file_path, data, delimiter="\t")
+    col_line = f"\n# {name}_axis\t{name}_value" if include_header else ""
+    np.savetxt(file_path, data, delimiter="\t", header=f"{_COMMON_HEADER}{col_line}")
     return file_path
 
 
@@ -194,7 +199,7 @@ def save_results(
             axis=time_arr,
             values=mean_arr,
             file_stem=f"{prefix}corrected_mean",
-            include_header=False,
+            include_header=True,
         )
     )
     written_files.append(
@@ -221,7 +226,7 @@ def save_results(
     if params_arr.shape[1] > len(col_names):
         col_names.extend([f"param_{idx}" for idx in range(len(col_names), params_arr.shape[1])])
     header_cols = "\t".join(col_names[: params_arr.shape[1]])
-    np.savetxt(params_path, params_arr, delimiter="\t", fmt="%.6e", header=header_cols)
+    np.savetxt(params_path, params_arr, delimiter="\t", fmt="%.6e", header=f"{_COMMON_HEADER}\n# {header_cols}")
     written_files.append(params_path)
 
     traces_h5_path = output_dir / f"{prefix}corrected_traces.h5"
@@ -280,8 +285,9 @@ def save_results(
             ncm_arr,
             fmt="%.6e",
             header=(
-                f"Noise Covariance Matrix ({ncm_arr.shape[0]}x{ncm_arr.shape[1]})\n"
-                f"Method: {ncm_metadata.get('method', 'unknown')}"
+                f"{_COMMON_HEADER}\n"
+                f"# Noise Covariance Matrix ({ncm_arr.shape[0]}x{ncm_arr.shape[1]})\n"
+                f"# Method: {ncm_metadata.get('method', 'unknown')}"
             ),
         )
         written_files.append(ncm_txt_path)
@@ -291,7 +297,7 @@ def save_results(
             ncm_diag_path,
             np.diag(ncm_arr),
             fmt="%.6e",
-            header="NCM Diagonal Elements",
+            header=f"{_COMMON_HEADER}\n# NCM Diagonal Elements",
         )
         written_files.append(ncm_diag_path)
 
@@ -302,7 +308,7 @@ def save_results(
                 precision_txt_path,
                 precision_arr,
                 fmt="%.6e",
-                header=f"Precision Matrix ({precision_arr.shape[0]}x{precision_arr.shape[1]})",
+                header=f"{_COMMON_HEADER}\n# Precision Matrix ({precision_arr.shape[0]}x{precision_arr.shape[1]})",
             )
             written_files.append(precision_txt_path)
 
@@ -311,7 +317,7 @@ def save_results(
                 precision_diag_path,
                 np.diag(precision_arr),
                 fmt="%.6e",
-                header="Precision Matrix Diagonal Elements",
+                header=f"{_COMMON_HEADER}\n# Precision Matrix Diagonal Elements",
             )
             written_files.append(precision_diag_path)
 

@@ -1,5 +1,5 @@
 {
-  "filter_low": true,
+  "filter_low": false,
   "filter_high": false,
   "freq_start": 180000000000.0,
   "freq_end": 3500000000000.0,
@@ -15,6 +15,6 @@
   "opt_trace_mode": "All",
   "opt_trace_count": 1000,
   "legacy_plot_mode": false,
-  "ncm_time_sampling_mode": "Max",
+  "ncm_time_sampling_mode": "Sans",
   "ncm_max_samples": 32
 }
