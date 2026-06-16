@@ -3,7 +3,7 @@ name = "correct-tds2"
 version = "0.2.0"
 description = "JAX-accelerated correction tool for THz time-domain spectroscopy traces"
 authors = [
-    {name = "THzBiophotonics — IEMN CNRS"}
+    {name = "Florian Letertre THzBiophotonics — IEMN CNRS"}
 ]
 license = "MIT"
 readme = "README.md"
