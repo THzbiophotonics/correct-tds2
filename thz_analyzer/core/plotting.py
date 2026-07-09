@@ -348,6 +348,8 @@ def build_freq_domain_plot(
     *,
     ref_spec: Any = None,
     corrected_spec: Any = None,
+    raw_std: Any = None,
+    corrected_std: Any = None,
     title: str = "Spectra",
     x_label: str = "Frequency [Hz]",
     y_label: str = "E",
@@ -358,6 +360,10 @@ def build_freq_domain_plot(
         _add_line(p, freqs, ref_spec, label="Reference", color=ALASKA_BLUE)
     if corrected_spec is not None:
         _add_line(p, freqs, corrected_spec, label="Corrected", color=ALASKA_SECONDARY)
+    if raw_std is not None:
+        _add_line(p, freqs, raw_std, label="Std Raw", color=ALASKA_PRIMARY, line_dash="dashed", line_width=1)
+    if corrected_std is not None:
+        _add_line(p, freqs, corrected_std, label="Std Corrected", color=ALASKA_SECONDARY, line_dash="dashed", line_width=1)
     return p
 
 

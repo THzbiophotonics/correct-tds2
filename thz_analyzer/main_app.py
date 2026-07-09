@@ -1,7 +1,16 @@
 import json
 import gc
+import os
+import sys
 from pathlib import Path
 import traceback
+
+# --no-preallocate (passed via `panel serve ... --args --no-preallocate`)
+# must be handled before `import jax` below - JAX only reads
+# XLA_PYTHON_CLIENT_PREALLOCATE at import time, it can't be toggled once
+# the module is already loaded.
+if "--no-preallocate" in sys.argv:
+    os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 # JAX configuration — must happen before any JAX computation.
 # x64: enables float64 (required for numerically stable NCM inversion).
@@ -1460,6 +1469,7 @@ class THzOptimizerApp:
                 freqs,
                 self._db_scale(mean_spec_f),
                 ref_spec=self._db_scale(ref_spec_f),
+                raw_std=self._db_scale(std_spec_f),
                 title="Spectra (log)",
                 y_label="E [dB]",
             )
@@ -2493,6 +2503,8 @@ class THzOptimizerApp:
                     self._db_scale(mean_spec_raw_f),
                     ref_spec=self._db_scale(ref_spec_f),
                     corrected_spec=self._db_scale(mean_spec_corr_f),
+                    raw_std=self._db_scale(std_spec_raw_f),
+                    corrected_std=self._db_scale(std_spec_corr_f),
                     title="Spectra (log)",
                     y_label="E [dB]",
                 )
